@@ -13,6 +13,8 @@ local MAX_DISPLAY_CRAFTS = 10
 local MAX_DISPLAY_FLUIDS = 10
 local LOOP_DELAY = 60 -- seconds between loops
 
+local DEBUG_MODE = true  -- Set to false to enable real crafting
+
 -- Load thresholds
 local threshold_data = loadfile("/home/thresholds.lua")()
 
@@ -76,6 +78,11 @@ end
 
 -- Craft with retry/backoff
 local function request_craft_with_retry(fluid_name, amount, max_retries, delay_sec)
+  if DEBUG_MODE then
+    -- Pretend to succeed without actually requesting craft
+    return true
+  end
+
   max_retries = max_retries or 5
   delay_sec = delay_sec or 5
 
@@ -90,7 +97,6 @@ local function request_craft_with_retry(fluid_name, amount, max_retries, delay_s
     if success then
       return true
     else
-      -- Don't flood the screen on error, return error so main loop can handle
       if attempt < max_retries then
         os.sleep(delay_sec)
         delay_sec = delay_sec * 2
