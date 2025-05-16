@@ -1,132 +1,109 @@
 local component = require("component")
 local fs = require("filesystem")
-local serialization = require("serialization")
 local event = require("event")
 local term = require("term")
 local computer = require("computer")
 
 local me = component.me_interface
 local gpu = component.gpu
-local screen = component.screen
 
 local DEBUG_MODE = true  -- Set to false for real crafting
 
-local FLUID_STATE_FILE = "/fluid_levels.json"
-local FLUID_THRESHOLDS_FILE = "/fluid_thresholds.json"
-local CRAFT_LOG_FILE = "/craft_log.json"
+local FLUID_STATE_FILE = "/fluid_levels.lua"
+local FLUID_THRESHOLDS_FILE = "/fluid_thresholds.lua"
+local CRAFT_LOG_FILE = "/craft_log.lua"
 local MAX_LOG_ENTRIES = 1000
 local DISPLAY_ENTRIES = 10
 local CRAFT_RETRY_DELAY = 5
 local MAX_RETRIES = 5
 local LOOP_INTERVAL = 60
 
-local function read_thresholds()
-  local handle, err = io.open(FLUID_THRESHOLDS_FILE, "r")
-  if not handle then return {} end
-  local content = handle:read("*a")
-  handle:close()
-  return serialization.unserialize(content) or {}
+-- Load thresholds from Lua file
+local function load_thresholds()
+  local ok, data = pcall(dofile, FLUID_THRESHOLDS_FILE)
+  if ok and type(data) == "table" then return data else return {} end
 end
 
-local function get_fluids()
-  local fluids = me.getFluidsInNetwork()
-  local fluid_map = {}
-  for _, fluid in ipairs(fluids or {}) do
-    fluid_map[fluid.label] = fluid.amount
-  end
-  return fluid_map
-end
-
-local function save_json_chunked(tbl, path)
-  local handle, err = io.open(path, "w")
-  if not handle then return false end
-  handle:write("{\n")
-  local first = true
-  for k, v in pairs(tbl) do
-    if not first then
-      handle:write(",\n")
-    end
-    handle:write(string.format("  %q: %d", k, v))
-    first = false
-  end
-  handle:write("\n}\n")
-  handle:close()
-  return true
-end
-
-local function request_craft_with_retry(fluid, amount)
-  if DEBUG_MODE then return true end
-  for attempt = 1, MAX_RETRIES do
-    local success = me.requestCraft({{name = fluid, amount = amount}}, false)
-    if success then return true end
-    os.sleep(CRAFT_RETRY_DELAY * attempt)
-  end
-  return false
-end
-
+-- Load previous craft log
 local function load_craft_log()
-  local f = io.open(CRAFT_LOG_FILE, "r")
-  if not f then return {} end
-  local log = serialization.unserialize(f:read("*a")) or {}
-  f:close()
-  return log
+  local ok, data = pcall(dofile, CRAFT_LOG_FILE)
+  if ok and type(data) == "table" then return data else return {} end
 end
 
-local function save_craft_log(log)
-  while #log > MAX_LOG_ENTRIES do
-    table.remove(log, 1)
+-- Save Lua table to file as a Lua table
+local function save_lua_table(path, tbl, varname)
+  local handle = io.open(path, "w")
+  handle:write(varname .. " = {\n")
+  for k, v in pairs(tbl) do
+    if type(v) == "string" then
+      handle:write(string.format("  [%q] = %q,\n", k, v))
+    else
+      handle:write(string.format("  [%q] = %s,\n", k, tostring(v)))
+    end
   end
-  local f = io.open(CRAFT_LOG_FILE, "w")
-  if f then
-    f:write(serialization.serialize(log))
-    f:close()
-  end
+  handle:write("}\n")
+  handle:close()
 end
 
-local function update_display(log, low_fluids)
-  term.clear()
-  term.setCursor(1, 1)
-  print("GTNH Fluid Monitor")
-  print("Below Thresholds:")
-  for i = 1, math.min(DISPLAY_ENTRIES, #low_fluids) do
-    local fluid = low_fluids[i]
-    print(string.format(" - %s: %d / min %d", fluid.name, fluid.amount, fluid.min))
+-- Get fluid levels
+local function get_fluids()
+  local fluids = me.getFluidsInNetwork() or {}
+  local result = {}
+  for _, fluid in ipairs(fluids) do
+    result[fluid.label] = fluid.amount
   end
-  print("\nRecent Craft Attempts:")
-  for i = math.max(1, #log - DISPLAY_ENTRIES + 1), #log do
-    local entry = log[i]
-    print(string.format(" %s %d units of %s", entry.success and "✓" or "✗", entry.amount, entry.name))
-  end
+  return result
 end
 
--- Main loop
+-- Attempt a craft with retry/backoff
+local function request_craft_with_retry(fluid_name, amount)
+  if DEBUG_MODE then return true, "DEBUG: Pretend craft" end
+  for i = 1, MAX_RETRIES do
+    local success, err = me.requestCraft({{name = fluid_name, amount = amount}}, false)
+    if success then return true end
+    os.sleep(CRAFT_RETRY_DELAY * i)
+  end
+  return false, "FAILED after retries"
+end
+
+-- Main logic
 while true do
+  local thresholds = load_thresholds()
   local fluids = get_fluids()
-  save_json_chunked(fluids, FLUID_STATE_FILE)
+  save_lua_table(FLUID_STATE_FILE, fluids, "fluid_levels")
 
-  local thresholds = read_thresholds()
-  local craft_log = load_craft_log()
+  local log = load_craft_log()
+  local updated_log = {}
+  local below = {}
+  local now = os.time()
 
-  local low_fluids = {}
-
-  for name, limits in pairs(thresholds) do
-    local current = fluids[name] or 0
-    if current < limits.lower then
-      table.insert(low_fluids, {name = name, amount = current, min = limits.lower})
-      local craft_success = request_craft_with_retry(name, limits.upper - current)
-      table.insert(craft_log, {
-        time = os.time(),
-        name = name,
-        amount = limits.upper - current,
-        success = craft_success,
-        debug = DEBUG_MODE
-      })
+  for fluid, thresh in pairs(thresholds) do
+    local current = fluids[fluid] or 0
+    if current < thresh.lower then
+      table.insert(below, {fluid = fluid, amount = current})
+      local craft_amount = thresh.upper - current
+      local ok, result = request_craft_with_retry(fluid, craft_amount)
+      table.insert(log, 1, string.format("[%s] %s: %s %s",
+        os.date("%H:%M:%S", now), fluid,
+        ok and "Requested" or "Failed", DEBUG_MODE and "(debug)" or result or ""))
     end
   end
 
-  save_craft_log(craft_log)
-  table.sort(low_fluids, function(a, b) return a.name < b.name end)
-  update_display(craft_log, low_fluids)
+  while #log > MAX_LOG_ENTRIES do table.remove(log) end
+  save_lua_table(CRAFT_LOG_FILE, log, "craft_log")
+
+  -- Display
+  term.clear()
+  print("Last 10 Craft Attempts:")
+  for i = 1, math.min(DISPLAY_ENTRIES, #log) do
+    print(log[i])
+  end
+
+  print("\nBelow Threshold Fluids:")
+  for i = 1, math.min(DISPLAY_ENTRIES, #below) do
+    local entry = below[i]
+    print(string.format("%s: %d", entry.fluid, entry.amount))
+  end
 
   os.sleep(LOOP_INTERVAL)
 end
