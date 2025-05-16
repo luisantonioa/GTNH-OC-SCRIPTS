@@ -11,10 +11,13 @@ local gpu = component.gpu
 local screen = component.screen
 gpu.bind(screen.address)
 
+local interfaceAddress = "bea7e9dc-bc7f-4b4b-88dc-8d65b08df7b0"
+local meInterface = component.proxy(interfaceAddress)
+
 -- Settings
 local DISPLAY_ENTRIES = 10
 local LOOP_INTERVAL = 60  -- seconds
-local DEBUG_MODE = true
+local DEBUG_MODE = false
 local LOG_FILE = "/home/craft_log.lua"
 local THRESHOLD_FILE = "/home/fluid_thresholds.lua"
 local MAX_LOG_ENTRIES = 1000
@@ -101,13 +104,34 @@ local function readFluids()
   return fluids
 end
 
+local function findCraftable(fluid)
+  for _, craft in ipairs(meInterface.getCraftables()) do
+    local stack = craft.getItemStack()
+    local fluidToLabel = "drop of " .. fluid
+    if stack.label == fluidToLabel then
+      return craft
+    end
+  end
+end
+
 local function requestCraft(fluid, amount)
   if DEBUG_MODE then
     print("DEBUG: would request craft for", fluid, amount)
     return true
   end
-  local me = component.me_interface
-  local success = me.requestCrafting({name = fluid, amount = amount})
+
+  local craft = findCraftable(fluid)
+  if craft then
+    local ok, err = pcall(function() craft.request(amount) end)
+    if ok then
+      print("Crafting request sent for", label, amount)
+    else
+      print("Craft request failed:", err)
+    end
+  else
+    print("Craftable not found for label:", label)
+  end
+  
   return success
 end
 
