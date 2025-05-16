@@ -98,7 +98,12 @@ end
 local function readFluids()
   local fluids = {}
   local me = component.me_interface
-  for _, f in ipairs(me.getFluidsInNetwork()) do
+  local result = me.getFluidsInNetwork()
+  if not result then
+    return nil, "ME interface returned nil"
+  end
+
+  for _, f in ipairs(result) do
     fluids[f.label] = f.amount
   end
   return fluids
@@ -140,23 +145,30 @@ local function monitor()
 
   while true do
     local now = computer.uptime()
-    local fluids = readFluids()
-
-    -- Craft requests if below thresholds
-    for name, t in pairs(thresholds) do
-      local amt = fluids[name] or 0
-      if amt < t.lower then
-        local reqAmt = t.upper - amt
-        local success = requestCraft(name, reqAmt)
-        table.insert(craftLog, {
-          fluid = name,
-          amount = reqAmt,
-          time = os.time()
-        })
-        if #craftLog > MAX_LOG_ENTRIES then
-          table.remove(craftLog, 1)
+    local fluids, err = readFluids()
+    if not fluids then
+      term.clear()
+      gpu.setForeground(0xFF0000)
+      gpu.set(1, 1, "AE2 Offline or No Fluids: " .. (err or "unknown error"))
+      gpu.set(1, 2, "Will retry in " .. LOOP_INTERVAL .. " seconds...")
+      os.sleep(LOOP_INTERVAL)
+    else
+      -- Craft requests if below thresholds
+      for name, t in pairs(thresholds) do
+        local amt = fluids[name] or 0
+        if amt < t.lower then
+          local reqAmt = t.upper - amt
+          local success = requestCraft(name, reqAmt)
+          table.insert(craftLog, {
+            fluid = name,
+            amount = reqAmt,
+            time = os.time()
+          })
+          if #craftLog > MAX_LOG_ENTRIES then
+            table.remove(craftLog, 1)
+          end
+          saveCraftLog()
         end
-        saveCraftLog()
       end
     end
 
