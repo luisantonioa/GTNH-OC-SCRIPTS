@@ -1,4 +1,4 @@
 return {
-  ["Chlorine"] = {lower = 500000, upper = 2000000},
+  ["Chlorine"] = {lower = 50000000, upper = 100000000},
   ["Oxygen"] = {lower = 300000, upper = 1000000},
 }
