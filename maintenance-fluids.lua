@@ -41,6 +41,18 @@ local function saveCraftLog()
   file:close()
 end
 
+local function formatNumber(n)
+  if n >= 1e9 then
+    return string.format("%.1fb", n / 1e9)
+  elseif n >= 1e6 then
+    return string.format("%.1fm", n / 1e6)
+  elseif n >= 1e3 then
+    return string.format("%.1fk", n / 1e3)
+  else
+    return tostring(n)
+  end
+end
+
 local function displayStatus(fluids)
   term.clear()
   gpu.setForeground(0xFFFFFF)
@@ -95,18 +107,6 @@ local function requestCraft(fluid, amount)
   local me = component.me_interface
   local success = me.requestCrafting({name = fluid, amount = amount})
   return success
-end
-
-local function formatNumber(n)
-  if n >= 1e9 then
-    return string.format("%.1fb", n / 1e9)
-  elseif n >= 1e6 then
-    return string.format("%.1fm", n / 1e6)
-  elseif n >= 1e3 then
-    return string.format("%.1fk", n / 1e3)
-  else
-    return tostring(n)
-  end
 end
 
 local function monitor()
