@@ -1,122 +1,131 @@
 local component = require("component")
-local fs = require("filesystem")
 local event = require("event")
 local term = require("term")
 local computer = require("computer")
 local keyboard = require("keyboard")
+local fs = require("filesystem")
+local unicode = require("unicode")
+local serialization = require("serialization")
 
-local me = component.me_interface
 local gpu = component.gpu
+local screen = component.screen
+gpu.bind(screen.address)
 
-local DEBUG_MODE = true  -- Set to false for real crafting
-
-local FLUID_STATE_FILE = "/fluid_levels.lua"
-local FLUID_THRESHOLDS_FILE = "/fluid_thresholds.lua"
-local CRAFT_LOG_FILE = "/craft_log.lua"
-local MAX_LOG_ENTRIES = 1000
+-- Settings
 local DISPLAY_ENTRIES = 10
-local CRAFT_RETRY_DELAY = 5
-local MAX_RETRIES = 5
-local LOOP_INTERVAL = 60
+local LOOP_INTERVAL = 60  -- seconds
+local DEBUG_MODE = false
+local LOG_FILE = "/craft_log.lua"
+local THRESHOLD_FILE = "/fluid_thresholds.lua"
+local MAX_LOG_ENTRIES = 1000
 
--- Load thresholds from Lua file
-local function load_thresholds()
-  local ok, data = pcall(dofile, FLUID_THRESHOLDS_FILE)
-  if ok and type(data) == "table" then return data else return {} end
-end
+-- Load fluid thresholds
+local thresholds = dofile(THRESHOLD_FILE)
 
--- Load previous craft log
-local function load_craft_log()
-  local ok, data = pcall(dofile, CRAFT_LOG_FILE)
-  if ok and type(data) == "table" then return data else return {} end
-end
-
--- Save Lua table to file as a Lua table
-local function save_lua_table(path, tbl, varname)
-  local handle = io.open(path, "w")
-  handle:write(varname .. " = {\n")
-  for k, v in pairs(tbl) do
-    if type(v) == "string" then
-      handle:write(string.format("  [%q] = %q,\n", k, v))
-    else
-      handle:write(string.format("  [%q] = %s,\n", k, tostring(v)))
-    end
-  end
-  handle:write("}\n")
-  handle:close()
-end
-
--- Get fluid levels
-local function get_fluids()
-  local fluids = me.getFluidsInNetwork() or {}
-  local result = {}
-  for _, fluid in ipairs(fluids) do
-    result[fluid.label] = fluid.amount
-  end
-  return result
-end
-
--- Attempt a craft with retry/backoff
-local function request_craft_with_retry(fluid_name, amount)
-  if DEBUG_MODE then return true, "DEBUG: Pretend craft" end
-  for i = 1, MAX_RETRIES do
-    local success, err = me.requestCraft({{name = fluid_name, amount = amount}}, false)
-    if success then return true end
-    os.sleep(CRAFT_RETRY_DELAY * i)
-  end
-  return false, "FAILED after retries"
-end
-
-local function waitForExitOrTimeout(timeout)
-  local deadline = computer.uptime() + timeout
-  while computer.uptime() < deadline do
-    local evt, _, char, code = event.pull(0.1, "key_down")
-    if evt and (char == string.byte("q") or code == keyboard.keys.q) then
-      print("Exiting...")
-      os.exit()
-    end
+-- Craft log
+local craftLog = {}
+if fs.exists(LOG_FILE) then
+  local ok, result = pcall(dofile, LOG_FILE)
+  if ok and type(result) == "table" then
+    craftLog = result
   end
 end
 
--- Main logic
-while true do
-  local thresholds = load_thresholds()
-  local fluids = get_fluids()
-  save_lua_table(FLUID_STATE_FILE, fluids, "fluid_levels")
+-- Set screen resolution
+local w, h = gpu.maxResolution()
+gpu.setResolution(w, h)
 
-  local log = load_craft_log()
-  local updated_log = {}
-  local below = {}
-  local now = os.time()
+local function saveCraftLog()
+  local file = io.open(LOG_FILE, "w")
+  file:write("return " .. serialization.serialize(craftLog))
+  file:close()
+end
 
-  for fluid, thresh in pairs(thresholds) do
-    local current = fluids[fluid] or 0
-    if current < thresh.lower then
-      table.insert(below, {fluid = fluid, amount = current})
-      local craft_amount = thresh.upper - current
-      local ok, result = request_craft_with_retry(fluid, craft_amount)
-      table.insert(log, 1, string.format("[%s] %s: %s %s",
-        os.date("%H:%M:%S", now), fluid,
-        ok and "Requested" or "Failed", DEBUG_MODE and "(debug)" or result or ""))
-    end
-  end
-
-  while #log > MAX_LOG_ENTRIES do table.remove(log) end
-  save_lua_table(CRAFT_LOG_FILE, log, "craft_log")
-
-  -- Display
+local function displayStatus(fluids)
   term.clear()
-  print("Last 10 Craft Attempts:")
-  for i = 1, math.min(DISPLAY_ENTRIES, #log) do
-    print(log[i])
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(1, 1, "=== Fluid Monitor ===")
+
+  -- Tracked fluids
+  gpu.set(1, 3, "Tracked Fluids:")
+  local i = 0
+  local names = {}
+  for name in pairs(thresholds) do table.insert(names, name) end
+  table.sort(names)
+  for _, name in ipairs(names) do
+    if i >= DISPLAY_ENTRIES then break end
+    local val = fluids[name] or 0
+    local limits = thresholds[name]
+    local line = string.format("%-20s: %10d / [%d, %d]", name, val, limits.lower, limits.upper)
+    gpu.set(2, 4 + i, unicode.sub(line, 1, w - 2))
+    i = i + 1
   end
 
-  print("\nBelow Threshold Fluids:")
-  for i = 1, math.min(DISPLAY_ENTRIES, #below) do
-    local entry = below[i]
-    print(string.format("%s: %d", entry.fluid, entry.amount))
+  -- Last crafts
+  gpu.set(1, 16, "Last Craft Attempts:")
+  for j = 1, math.min(DISPLAY_ENTRIES, #craftLog) do
+    local entry = craftLog[#craftLog - j + 1]
+    local line = string.format("%-20s: %d", entry.fluid, entry.amount)
+    gpu.set(2, 16 + j, unicode.sub(line, 1, w - 2))
   end
 
-  -- os.sleep(LOOP_INTERVAL)
-  waitForExitOrTimeout(LOOP_INTERVAL)
+  gpu.setForeground(0x00FF00)
+  gpu.set(1, h, "Press Q to quit")
 end
+
+local function readFluids()
+  local fluids = {}
+  local me = component.me_interface
+  for _, f in ipairs(me.getFluidsInNetwork()) do
+    fluids[f.label] = f.amount
+  end
+  return fluids
+end
+
+local function requestCraft(fluid, amount)
+  if DEBUG_MODE then
+    print("DEBUG: would request craft for", fluid, amount)
+    return true
+  end
+  local me = component.me_interface
+  local success = me.requestCrafting({name = fluid, amount = amount})
+  return success
+end
+
+local function monitor()
+  while true do
+    local fluids = readFluids()
+
+    -- Loop through thresholds
+    for name, t in pairs(thresholds) do
+      local amt = fluids[name] or 0
+      if amt < t.lower then
+        local reqAmt = t.upper - amt
+        local success = requestCraft(name, reqAmt)
+        table.insert(craftLog, {
+          fluid = name,
+          amount = reqAmt,
+          time = os.time()
+        })
+        if #craftLog > MAX_LOG_ENTRIES then
+          table.remove(craftLog, 1)
+        end
+        saveCraftLog()
+      end
+    end
+
+    displayStatus(fluids)
+
+    -- Wait or quit
+    local deadline = computer.uptime() + LOOP_INTERVAL
+    while computer.uptime() < deadline do
+      local evt, _, char, code = event.pull(0.1, "key_down")
+      if evt and (char == string.byte("q") or code == keyboard.keys.q) then
+        print("Exiting...")
+        os.exit()
+      end
+    end
+  end
+end
+
+monitor()
