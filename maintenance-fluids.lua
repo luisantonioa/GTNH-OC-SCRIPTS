@@ -56,7 +56,12 @@ local function displayStatus(fluids)
     if i >= DISPLAY_ENTRIES then break end
     local val = fluids[name] or 0
     local limits = thresholds[name]
-    local line = string.format("%-20s: %10d / [%d, %d]", name, val, limits.lower, limits.upper)
+    local line = string.format("%-20s: %8s / [%s, %s]",
+      name,
+      formatNumber(val),
+      formatNumber(limits.lower),
+      formatNumber(limits.upper)
+    )
     gpu.set(2, 4 + i, unicode.sub(line, 1, w - 2))
     i = i + 1
   end
@@ -90,6 +95,18 @@ local function requestCraft(fluid, amount)
   local me = component.me_interface
   local success = me.requestCrafting({name = fluid, amount = amount})
   return success
+end
+
+local function formatNumber(n)
+  if n >= 1e9 then
+    return string.format("%.1fb", n / 1e9)
+  elseif n >= 1e6 then
+    return string.format("%.1fm", n / 1e6)
+  elseif n >= 1e3 then
+    return string.format("%.1fk", n / 1e3)
+  else
+    return tostring(n)
+  end
 end
 
 local function monitor()
