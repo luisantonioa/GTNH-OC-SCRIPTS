@@ -3,6 +3,7 @@ local fs = require("filesystem")
 local event = require("event")
 local term = require("term")
 local computer = require("computer")
+local keyboard = require("keyboard")
 
 local me = component.me_interface
 local gpu = component.gpu
@@ -66,6 +67,17 @@ local function request_craft_with_retry(fluid_name, amount)
   return false, "FAILED after retries"
 end
 
+local function waitForExitOrTimeout(timeout)
+  local deadline = computer.uptime() + timeout
+  while computer.uptime() < deadline do
+    local evt, _, char, code = event.pull(0.1, "key_down")
+    if evt and (char == string.byte("q") or code == keyboard.keys.q) then
+      print("Exiting...")
+      os.exit()
+    end
+  end
+end
+
 -- Main logic
 while true do
   local thresholds = load_thresholds()
@@ -105,5 +117,6 @@ while true do
     print(string.format("%s: %d", entry.fluid, entry.amount))
   end
 
-  os.sleep(LOOP_INTERVAL)
+  -- os.sleep(LOOP_INTERVAL)
+  waitForExitOrTimeout(LOOP_INTERVAL)
 end
