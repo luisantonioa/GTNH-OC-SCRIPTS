@@ -14,7 +14,7 @@ gpu.bind(screen.address)
 -- Settings
 local DISPLAY_ENTRIES = 10
 local LOOP_INTERVAL = 60  -- seconds
-local DEBUG_MODE = false
+local DEBUG_MODE = true
 local LOG_FILE = "/home/craft_log.lua"
 local THRESHOLD_FILE = "/home/fluid_thresholds.lua"
 local MAX_LOG_ENTRIES = 1000
