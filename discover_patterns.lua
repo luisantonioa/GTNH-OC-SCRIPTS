@@ -2,7 +2,7 @@ local component = require("component")
 local serialization = require("serialization")
 local fs = require("filesystem")
 
-local me = component.me_interface
+local me = component.proxy("bea7e9dc-bc7f-4b4b-88dc-8d65b08df7b0")
 local file_path = "/home/requestables.lua"
 
 local function getCraftables()
