@@ -34,6 +34,9 @@ if fs.exists(LOG_FILE) then
   end
 end
 
+-- Retry cooldowns per fluid
+local retryCooldowns = {}
+
 -- Set screen resolution
 local w, h = gpu.maxResolution()
 gpu.setResolution(w, h)
@@ -56,16 +59,13 @@ local function formatNumber(n)
   end
 end
 
-local function displayStatus(fluids, skipHeader)
-  if not skipHeader then
-    term.clear()
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(1, 1, "=== Fluid Monitor ===")
-  end
+local function displayStatus(fluids, timeLeft)
+  term.clear()
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(1, 1, "=== Fluid Monitor ===")
 
-  local baseLine = skipHeader and 2 or 3
-
-  gpu.set(1, baseLine, "Tracked Fluids:")
+  -- Tracked fluids
+  gpu.set(1, 3, "Tracked Fluids:")
   local i = 0
   local names = {}
   for name in pairs(thresholds) do table.insert(names, name) end
@@ -80,17 +80,21 @@ local function displayStatus(fluids, skipHeader)
       formatNumber(limits.lower),
       formatNumber(limits.upper)
     )
-    gpu.set(2, baseLine + 1 + i, unicode.sub(line, 1, w - 2))
+    gpu.set(2, 4 + i, unicode.sub(line, 1, w - 2))
     i = i + 1
   end
 
-  gpu.set(1, baseLine + 13, "Last Craft Attempts:")
+  -- Last crafts
+  gpu.set(1, 16, "Last Craft Attempts:")
   for j = 1, math.min(DISPLAY_ENTRIES, #craftLog) do
     local entry = craftLog[#craftLog - j + 1]
-    local line = string.format("%-20s: %d", entry.fluid, entry.amount)
-    gpu.set(2, baseLine + 13 + j, unicode.sub(line, 1, w - 2))
+    local line = string.format("%-20s: %s", entry.fluid, formatNumber(entry.amount))
+    gpu.set(2, 16 + j, unicode.sub(line, 1, w - 2))
   end
 
+  -- Footer
+  gpu.setForeground(0xFFFF00)
+  gpu.set(1, h - 1, string.format("Next refresh in: %.0fs", timeLeft))
   gpu.setForeground(0x00FF00)
   gpu.set(1, h, "Press Q to quit")
 end
@@ -98,12 +102,7 @@ end
 local function readFluids()
   local fluids = {}
   local me = component.me_interface
-  local result = me.getFluidsInNetwork()
-  if not result then
-    return nil, "ME interface returned nil"
-  end
-
-  for _, f in ipairs(result) do
+  for _, f in ipairs(me.getFluidsInNetwork()) do
     fluids[f.label] = f.amount
   end
   return fluids
@@ -124,41 +123,27 @@ local function requestCraft(fluid, amount)
     print("DEBUG: would request craft for", fluid, amount)
     return true
   end
-
   local craft = findCraftable(fluid)
   if craft then
     local ok, err = pcall(function() craft.request(amount) end)
     if ok then
-      print("Crafting request sent for", label, amount)
-    else
-      print("Craft request failed:", err)
+      return true
     end
-  else
-    print("Craftable not found for label:", label)
   end
-  
-  return success
+  return false
 end
 
 local function monitor()
-  local nextRefresh = computer.uptime() + LOOP_INTERVAL
-
   while true do
+    local fluids = readFluids()
     local now = computer.uptime()
-    local fluids, err = readFluids()
-    if not fluids then
-      term.clear()
-      gpu.setForeground(0xFF0000)
-      gpu.set(1, 1, "AE2 Offline or No Fluids: " .. (err or "unknown error"))
-      gpu.set(1, 2, "Will retry in " .. LOOP_INTERVAL .. " seconds...")
-      os.sleep(LOOP_INTERVAL)
-    else
-      -- Craft requests if below thresholds
-      for name, t in pairs(thresholds) do
-        local amt = fluids[name] or 0
-        if amt < t.lower then
-          local reqAmt = t.upper - amt
-          local success = requestCraft(name, reqAmt)
+
+    -- Loop through thresholds
+    for name, t in pairs(thresholds) do
+      local amt = fluids[name] or 0
+      if amt < t.lower and (not retryCooldowns[name] or retryCooldowns[name] < now) then
+        local reqAmt = t.upper - amt
+        if requestCraft(name, reqAmt) then
           table.insert(craftLog, {
             fluid = name,
             amount = reqAmt,
@@ -169,30 +154,21 @@ local function monitor()
           end
           saveCraftLog()
         end
+        retryCooldowns[name] = now + LOOP_INTERVAL
       end
     end
 
-    -- Reset next refresh time
-    nextRefresh = computer.uptime() + LOOP_INTERVAL
-
-    -- Inner loop to update countdown every 0.1 seconds and handle quit key
-    while computer.uptime() < nextRefresh do
-      local timeLeft = math.ceil(nextRefresh - computer.uptime())
-
-      -- Redraw status with countdown line
-      term.clear()
-      gpu.setForeground(0xFFFFFF)
-      gpu.set(1, 1, "=== Fluid Monitor ===   Next refresh in: " .. timeLeft .. "s")
-
-      -- Display the rest without clearing header again
-      displayStatus(fluids, true)
-
+    -- Countdown loop
+    local deadline = computer.uptime() + LOOP_INTERVAL
+    repeat
+      local timeLeft = deadline - computer.uptime()
+      displayStatus(fluids, timeLeft)
       local evt, _, char, code = event.pull(0.1, "key_down")
       if evt and (char == string.byte("q") or code == keyboard.keys.q) then
         print("Exiting...")
         os.exit()
       end
-    end
+    until computer.uptime() >= deadline
   end
 end
 
