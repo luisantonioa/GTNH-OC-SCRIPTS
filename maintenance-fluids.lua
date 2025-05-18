@@ -13,6 +13,7 @@ gpu.bind(screen.address)
 
 local interfaceAddress = "bea7e9dc-bc7f-4b4b-88dc-8d65b08df7b0"
 local meInterface = component.proxy(interfaceAddress)
+local meController = component.me_controller
 
 -- Settings
 local DISPLAY_ENTRIES = 10
@@ -120,7 +121,7 @@ end
 
 local function isCraftRunning(fluid)
   local targetLabel = "drop of " .. fluid
-  local craftingJobs = meInterface.getCraftingStatus()
+  local craftingJobs = meController.getCraftingStatus()
   for _, job in ipairs(craftingJobs) do
     if job and job.item and job.item.label == targetLabel then
       return true
