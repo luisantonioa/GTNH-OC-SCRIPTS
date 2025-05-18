@@ -146,7 +146,7 @@ local function isCraftRunning(fluid)
   -- If the status object threw an error or finished, clean it up
   if not ok or not result then
     activeCrafts[fluid] = nil
-    fluidStatuses[fluid] = nil
+    fluidStatuses[fluid] = "ok"
     return false
   end
 
