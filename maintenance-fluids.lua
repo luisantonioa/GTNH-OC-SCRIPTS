@@ -78,11 +78,15 @@ local function displayStatus(fluids, timeLeft)
   local names = {}
   for name in pairs(thresholds) do table.insert(names, name) end
   table.sort(names)
-  for _, name in ipairs(names) do
+  for i, name in ipairs(names) do
     if i >= DISPLAY_ENTRIES then break end
     local val = fluids[name] or 0
     local limits = thresholds[name]
-    local line = string.format("%-20s: %8s / [%s, %s]",
+    local status = fluidStatuses[name] or "ok"
+    local symbol = STATUS_SYMBOLS[status] or "?"
+    local line = string.format("%d. %s %-20s: %8s / [%s, %s]",
+      i,
+      symbol,
       name,
       formatNumber(val),
       formatNumber(limits.lower),
