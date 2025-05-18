@@ -118,16 +118,33 @@ local function findCraftable(fluid)
   end
 end
 
+local function isCraftRunning(fluid)
+  local targetLabel = "drop of " .. fluid
+  local craftingJobs = meInterface.getCraftingStatus()
+  for _, job in ipairs(craftingJobs) do
+    if job and job.item and job.item.label == targetLabel then
+      return true
+    end
+  end
+  return false
+end
+
 local function requestCraft(fluid, amount)
   if DEBUG_MODE then
     print("DEBUG: would request craft for", fluid, amount)
     return true
+  end
+  if isCraftRunning(fluid) then
+    -- Already crafting this fluid, skip request
+    return false
   end
   local craft = findCraftable(fluid)
   if craft then
     local ok, err = pcall(function() craft.request(amount) end)
     if ok then
       return true
+    else
+      print("Craft request failed:", err)
     end
   end
   return false
