@@ -23,6 +23,13 @@ local LOG_FILE = "/home/craft_log.lua"
 local THRESHOLD_FILE = "/home/fluid_thresholds.lua"
 local MAX_LOG_ENTRIES = 1000
 
+local fluidStatuses = {}
+local STATUS_SYMBOLS = {
+  ok = "✅",
+  crafting = "🔄",
+  error = "❌"
+}
+
 -- Load fluid thresholds
 local thresholds = dofile(THRESHOLD_FILE)
 
@@ -135,9 +142,11 @@ local function isCraftRunning(fluid)
   -- If the status object threw an error or finished, clean it up
   if not ok or not result then
     activeCrafts[fluid] = nil
+    fluidStatuses[fluid] = nil
     return false
   end
 
+  fluidStatuses[fluid] = "crafting"
   return true
 end
 
@@ -158,13 +167,16 @@ local function requestCraft(fluid, amount)
 
     if ok and result then
       activeCrafts[fluid] = result -- result is a CraftingStatus object
+      fluidStatuses[fluid] = "crafting"
       print("[INFO] Crafting request accepted for " .. fluid)
       return true
     else
       print("[ERROR] Craft request failed for " .. fluid .. ": " .. tostring(result))
+      fluidStatuses[fluid] = "error"
     end
   else
     print("[WARN] No craftable found for " .. fluid)
+    fluidStatuses[fluid] = "error"
   end
 
   return false
