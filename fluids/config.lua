@@ -1,11 +1,27 @@
-local config = {}
+-- File: config.lua
+local fs = require("filesystem")
+local serialization = require("serialization")
 
-config.DISPLAY_ENTRIES = 10
-config.LOOP_INTERVAL = 60  -- seconds
-config.DEBUG_MODE = true
-config.LOG_FILE = "/home/fluids/craft_log.lua"
-config.THRESHOLD_FILE = "/home/fluids/thresholds.lua"
-config.MAX_LOG_ENTRIES = 1000
-config.INTERFACE_ADDRESS = "bea7e9dc-bc7f-4b4b-88dc-8d65b08df7b0"
+local config = {}
+local CONFIG_PATH = "/home/fluids/thresholds.lua"
+local DEFAULT_THRESHOLDS = {
+  ["Chlorine"] = {lower = 5000000, upper = 10000000},
+}
+
+function config.load()
+  if fs.exists(CONFIG_PATH) then
+    local ok, result = pcall(dofile, CONFIG_PATH)
+    if ok and type(result) == "table" then
+      return result
+    end
+  end
+  return DEFAULT_THRESHOLDS
+end
+
+function config.save(thresholds)
+  local file = io.open(CONFIG_PATH, "w")
+  file:write("return " .. serialization.serialize(thresholds))
+  file:close()
+end
 
 return config
