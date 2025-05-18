@@ -1,10 +1,4 @@
-local component = require("component")
-local serialization = require("serialization")
-local config = require("fluids/config")
-
 local utils = {}
-
-utils.meInterface = component.proxy(config.INTERFACE_ADDRESS)
 
 function utils.formatNumber(n)
   if n >= 1e9 then
@@ -18,21 +12,13 @@ function utils.formatNumber(n)
   end
 end
 
-function utils.findCraftable(fluid)
-  for _, craft in ipairs(utils.meInterface.getCraftables()) do
-    local stack = craft.getItemStack()
-    if stack.label == "drop of " .. fluid then
-      return craft
-    end
+function utils.findMEInterfaces()
+  local component = require("component")
+  local meAddresses = {}
+  for addr, ctype in component.list("me_interface") do
+    table.insert(meAddresses, addr)
   end
-end
-
-function utils.readFluids()
-  local fluids = {}
-  for _, f in ipairs(utils.meInterface.getFluidsInNetwork() or {}) do
-    fluids[f.label] = f.amount
-  end
-  return fluids
+  return meAddresses
 end
 
 return utils
