@@ -2,52 +2,53 @@ local event = require("event")
 local computer = require("computer")
 local keyboard = require("keyboard")
 
-local config = require("config")
-local utils = require("utils")
-local ae = require("ae")
-local display = require("display")
+local config = require("fluids/config")
+local utils = require("fluids/utils")
+local display = require("fluids/display")
+local craftLog = require("fluids/craft_log")
 
-local thresholds = utils.loadTable(config.thresholdFile)
-local craftLog = utils.loadTable(config.logFile)
+local thresholds = dofile(config.THRESHOLD_FILE)
+local log = craftLog.load()
 
-local function logCraft(fluid, amount)
-  table.insert(craftLog, {
-    fluid = fluid,
-    amount = amount,
-    time = os.time()
-  })
-  while #craftLog > config.maxLogEntries do
-    table.remove(craftLog, 1)
-  end
-  utils.saveTable(config.logFile, craftLog)
-end
+local function monitor()
+  while true do
+    local fluids = utils.readFluids()
 
-while true do
-  local fluids = ae.getFluids()
-  if ae.isOnline() then
     for name, t in pairs(thresholds) do
       local amt = fluids[name] or 0
       if amt < t.lower then
         local reqAmt = t.upper - amt
-        if config.debugMode then
-          print("[DEBUG] Would craft", name, reqAmt)
-        else
-          if ae.requestCraft(name, reqAmt) then
-            logCraft(name, reqAmt)
+        local craftable = utils.findCraftable(name)
+        if craftable then
+          if config.DEBUG_MODE then
+            print("DEBUG: Would request craft of", reqAmt, name)
+          else
+            craftable.request(reqAmt)
           end
+          table.insert(log, {
+            fluid = name,
+            amount = reqAmt,
+            time = os.time()
+          })
+          if #log > config.MAX_LOG_ENTRIES then
+            table.remove(log, 1)
+          end
+          craftLog.save(log)
         end
       end
     end
-  else
-    print("[WARN] AE2 offline. Skipping craft requests.")
-  end
 
-  -- Refresh Display
-  for i = config.loopInterval, 0, -1 do
-    display.draw(fluids, thresholds, craftLog, i)
-    local evt, _, char, code = event.pull(1, "key_down")
-    if evt and (char == string.byte("q") or code == keyboard.keys.q) then
-      os.exit()
+    local refreshTime = config.LOOP_INTERVAL
+    while refreshTime > 0 do
+      display.status(fluids, thresholds, log, refreshTime)
+      local evt, _, char, code = event.pull(1, "key_down")
+      if evt and (char == string.byte("q") or code == keyboard.keys.q) then
+        print("Exiting...")
+        os.exit()
+      end
+      refreshTime = refreshTime - 1
     end
   end
 end
+
+monitor()
