@@ -119,15 +119,26 @@ local function findCraftable(fluid)
   end
 end
 
+-- Cache of fluid name -> CraftingStatus
+local activeCrafts = {}
+
+-- Check if a craft is currently running
 local function isCraftRunning(fluid)
-  local targetLabel = "drop of " .. fluid
-  local craftingJobs = meController.getCraftingStatus()
-  for _, job in ipairs(craftingJobs) do
-    if job and job.item and job.item.label == targetLabel then
-      return true
-    end
+  local status = activeCrafts[fluid]
+  if not status then return false end
+
+  -- Use CraftingStatus API to check if it's still in progress
+  local ok, result = pcall(function()
+    return not status.isDone() and not status.isCanceled()
+  end)
+
+  -- If the status object threw an error or finished, clean it up
+  if not ok or not result then
+    activeCrafts[fluid] = nil
+    return false
   end
-  return false
+
+  return true
 end
 
 local function requestCraft(fluid, amount)
@@ -136,18 +147,26 @@ local function requestCraft(fluid, amount)
     return true
   end
   if isCraftRunning(fluid) then
-    -- Already crafting this fluid, skip request
+    print("[INFO] Skipping craft; already running for " .. fluid)
     return false
   end
   local craft = findCraftable(fluid)
   if craft then
-    local ok, err = pcall(function() craft.request(amount) end)
-    if ok then
+    local ok, result = pcall(function()
+      return craft.request(amount)
+    end)
+
+    if ok and result then
+      activeCrafts[fluid] = result -- result is a CraftingStatus object
+      print("[INFO] Crafting request accepted for " .. fluid)
       return true
     else
-      print("Craft request failed:", err)
+      print("[ERROR] Craft request failed for " .. fluid .. ": " .. tostring(result))
     end
+  else
+    print("[WARN] No craftable found for " .. fluid)
   end
+
   return false
 end
 
