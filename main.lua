@@ -100,7 +100,7 @@ local function displayStatus(fluids, timeLeft)
   gpu.set(1, 16, "Last Craft Attempts:")
   for j = 1, math.min(DISPLAY_ENTRIES, #craftLog) do
     local entry = craftLog[#craftLog - j + 1]
-    local line = string.format("%-20s: %s", entry.fluid, formatNumber(entry.amount))
+    local line = string.format("[%s] %-20s: %s", entry.time, entry.fluid, formatNumber(entry.amount))
     gpu.set(2, 16 + j, unicode.sub(line, 1, w - 2))
   end
 
