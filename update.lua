@@ -5,8 +5,8 @@ local internet = require("internet")
 local baseURL = "https://raw.githubusercontent.com/luisantonioa/GTNH-OC-SCRIPTS/main/fluids/"
 local targetDir = "/home/"
 local files = {
-    "fluid_thresholds",
-    "main"
+    "fluid_thresholds.lua",
+    "main.lua"
 }
 
 local function download(file)
