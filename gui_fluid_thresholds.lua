@@ -58,13 +58,15 @@ end
 local function addFluid(thresholds)
   local available = readAvailableFluids()
   for name in pairs(thresholds) do
-    available[name] = nil -- remove already tracked
+    available[name] = nil
   end
+
   local options = {}
   for name in pairs(available) do
     table.insert(options, name)
   end
   table.sort(options)
+
   if #options == 0 then
     term.setCursor(1, 25)
     term.clearLine()
@@ -73,20 +75,36 @@ local function addFluid(thresholds)
     return
   end
 
+  term.clear()
+  print("Available Fluids to Add:")
   for i, name in ipairs(options) do
-    term.setCursor(1, 24 + i)
-    term.clearLine()
+    term.setCursor(2, i + 1)
     print(string.format("%d. %s", i, name))
   end
 
-  term.setCursor(1, 24 + #options + 1)
-  io.write("Select fluid to track [1-" .. #options .. "]: ")
-  local index = tonumber(io.read())
-  if index and options[index] then
-    local name = options[index]
-    local lower = promptInput("Lower threshold for " .. name, 1000)
-    local upper = promptInput("Upper threshold for " .. name, 8000)
-    thresholds[name] = {lower = lower, upper = upper}
+  term.setCursor(1, #options + 3)
+  print("Enter number of fluid to add, or press 'q' to cancel:")
+
+  local input = ""
+  while true do
+    local _, _, _, _, _, ch = event.pull("key_down")
+    if ch == keyboard.keys.q then
+      return
+    elseif ch >= keyboard.keys['0'] and ch <= keyboard.keys['9'] then
+      input = input .. tostring(ch - keyboard.keys['0'])
+      term.setCursor(1, #options + 4)
+      term.clearLine()
+      io.write("Selected: " .. input)
+    elseif ch == keyboard.keys.enter then
+      local index = tonumber(input)
+      if index and options[index] then
+        local name = options[index]
+        local lower = promptInput("Lower threshold for " .. name, 1000)
+        local upper = promptInput("Upper threshold for " .. name, 8000)
+        thresholds[name] = {lower = lower, upper = upper}
+      end
+      return
+    end
   end
 end
 
