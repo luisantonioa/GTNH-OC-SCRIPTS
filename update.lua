@@ -2,7 +2,7 @@ local fs = require("filesystem")
 local shell = require("shell")
 local internet = require("internet")
 
-local baseURL = "https://raw.githubusercontent.com/luisantonioa/GTNH-OC-SCRIPTS/main/fluids/"
+local baseURL = "https://raw.githubusercontent.com/luisantonioa/GTNH-OC-SCRIPTS/refs/heads/main/"
 local targetDir = "/home/"
 local files = {
     "fluid_thresholds.lua",
