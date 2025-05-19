@@ -45,6 +45,9 @@ end
 -- Retry cooldowns per fluid
 local retryCooldowns = {}
 
+-- Cache of fluid name -> CraftingStatus
+local activeCrafts = {}
+
 -- Set screen resolution
 local w, h = gpu.maxResolution()
 gpu.setResolution(w, h)
@@ -67,50 +70,6 @@ local function formatNumber(n)
   end
 end
 
-local function displayStatus(fluids, timeLeft)
-  term.clear()
-  gpu.setForeground(0xFFFFFF)
-  gpu.set(1, 1, "=== Fluid Monitor ===")
-
-  -- Tracked fluids
-  gpu.set(1, 3, "Tracked Fluids:")
-  local i = 0
-  local names = {}
-  for name in pairs(thresholds) do table.insert(names, name) end
-  table.sort(names)
-  for i, name in ipairs(names) do
-    if i >= DISPLAY_ENTRIES then break end
-    local val = fluids[name] or 0
-    local limits = thresholds[name]
-    local status = fluidStatuses[name] or "ok"
-    local symbol = STATUS_SYMBOLS[status] or "?"
-    local line = string.format("%d. %s %-20s: %8s / [%s, %s]",
-      i,
-      symbol,
-      name,
-      formatNumber(val),
-      formatNumber(limits.lower),
-      formatNumber(limits.upper)
-    )
-    gpu.set(2, 4 + i, unicode.sub(line, 1, w - 2))
-    i = i + 1
-  end
-
-  -- Last crafts
-  gpu.set(1, 16, "Last Craft Attempts:")
-  for j = 1, math.min(DISPLAY_ENTRIES, #craftLog) do
-    local entry = craftLog[#craftLog - j + 1]
-    local line = string.format("[%s] %-20s: %s", entry.time, entry.fluid, formatNumber(entry.amount))
-    gpu.set(2, 16 + j, unicode.sub(line, 1, w - 2))
-  end
-
-  -- Footer
-  gpu.setForeground(0xFFFF00)
-  gpu.set(1, h - 1, string.format("Next refresh in: %.0fs", timeLeft))
-  gpu.setForeground(0x00FF00)
-  gpu.set(1, h, "Press Q to quit")
-end
-
 local function readFluids()
   local fluids = {}
   local me = component.me_interface
@@ -129,9 +88,6 @@ local function findCraftable(fluid)
     end
   end
 end
-
--- Cache of fluid name -> CraftingStatus
-local activeCrafts = {}
 
 -- Check if a craft is currently running
 local function isCraftRunning(fluid)
@@ -184,6 +140,53 @@ local function requestCraft(fluid, amount)
   end
 
   return false
+end
+
+local function displayStatus(fluids, timeLeft)
+  term.clear()
+  gpu.setForeground(0xFFFFFF)
+  gpu.set(1, 1, "=== Fluid Monitor ===")
+
+  -- Tracked fluids
+  gpu.set(1, 3, "Tracked Fluids:")
+  local i = 0
+  local names = {}
+  for name in pairs(thresholds) do table.insert(names, name) end
+  table.sort(names)
+  for i, name in ipairs(names) do
+    if i >= DISPLAY_ENTRIES then break end
+
+    isCraftRunning(name)
+
+    local val = fluids[name] or 0
+    local limits = thresholds[name]
+    local status = fluidStatuses[name] or "ok"
+    local symbol = STATUS_SYMBOLS[status] or "?"
+    local line = string.format("%d. %s %-20s: %8s / [%s, %s]",
+      i,
+      symbol,
+      name,
+      formatNumber(val),
+      formatNumber(limits.lower),
+      formatNumber(limits.upper)
+    )
+    gpu.set(2, 4 + i, unicode.sub(line, 1, w - 2))
+    i = i + 1
+  end
+
+  -- Last crafts
+  gpu.set(1, 16, "Last Craft Attempts:")
+  for j = 1, math.min(DISPLAY_ENTRIES, #craftLog) do
+    local entry = craftLog[#craftLog - j + 1]
+    local line = string.format("[%s] %-20s: %s", entry.time, entry.fluid, formatNumber(entry.amount))
+    gpu.set(2, 16 + j, unicode.sub(line, 1, w - 2))
+  end
+
+  -- Footer
+  gpu.setForeground(0xFFFF00)
+  gpu.set(1, h - 1, string.format("Next refresh in: %.0fs", timeLeft))
+  gpu.setForeground(0x00FF00)
+  gpu.set(1, h, "Press Q to quit")
 end
 
 local function monitor()
