@@ -7,6 +7,8 @@ local fs = require("filesystem")
 local unicode = require("unicode")
 local serialization = require("serialization")
 
+local gui = require("gui_fluid_thresholds")
+
 local gpu = component.gpu
 local screen = component.screen
 gpu.bind(screen.address)
@@ -220,9 +222,13 @@ local function monitor()
       local timeLeft = deadline - computer.uptime()
       displayStatus(fluids, timeLeft)
       local evt, _, char, code = event.pull(0.1, "key_down")
-      if evt and (char == string.byte("q") or code == keyboard.keys.q) then
+      if code == keyboard.keys.q then
         print("Exiting...")
         os.exit()
+      elseif code == keyboard.keys.e then
+        term.clear()
+        term.setCursor(1, 1)
+        gui.run(thresholds, THRESHOLD_FILE)
       end
     until computer.uptime() >= deadline
   end
