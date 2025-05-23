@@ -44,8 +44,11 @@ local function countPatterns()
   return i
 end
 
+local patterns = countPatterns()
+print("Patterns: ", #patterns)
+
 -- Main logic: read patterns, apply replacements, write back
-for i = 0, countPatterns() - 1 do
+for i = 0, patterns - 1 do
   local pattern = meInterface.getInterfacePattern(i)
   if not pattern or not pattern.pattern then goto continue end
 
