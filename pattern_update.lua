@@ -3,22 +3,42 @@ local sides = require("sides")
 local ic = component.inventory_controller
 
 -- CONFIGURATION
-local interfaceSide = sides.up  -- Change to the side touching your ME Interface
+local interfaceSide = sides.up -- Adjust as needed
 local replacements = {
-  ["drop of Krypton"] = "drop of Xenon"
+  ["drop of Krypton"] = {
+    label = "drop of Xenon",
+    ratio = 250/400,  -- multiply amount by this
+  },
+  ["drop of Nitrogen"] = {
+    label = "drop of Xenon",
+    ratio = 250/1000, -- multiply amount by this
+  }
 }
 
--- HELPER: Replace label strings
-local function applyReplacements(label)
-  for from, to in pairs(replacements) do
-    if label:lower():find(from:lower()) then
-      return label:gsub(from, to)
+-- Replace label and adjust amount according to ratio
+local function applyReplacements(item)
+  for from, toData in pairs(replacements) do
+    if item.label and item.label:lower():find(from:lower()) then
+      local newLabel = item.label:gsub(from, toData.label)
+      if newLabel ~= item.label then
+        -- Adjust amount if present
+        if item.amount and type(item.amount) == "number" then
+          local oldAmount = item.amount
+          local newAmount = math.floor(oldAmount * toData.ratio + 0.5) -- round nearest
+          print(string.format("↪ %s x%d → %s x%d", item.label, oldAmount, newLabel, newAmount))
+          item.amount = newAmount
+        else
+          print(string.format("↪ %s → %s (no amount to adjust)", item.label, newLabel))
+        end
+        item.label = newLabel
+        return true
+      end
     end
   end
-  return label
+  return false
 end
 
--- PROCESS: One pattern in one slot
+-- Process single slot pattern
 local function processPattern(slot)
   local stack = ic.getStackInSlot(interfaceSide, slot)
   if not stack or not stack.name:find("encoded_pattern") then return false end
@@ -31,13 +51,8 @@ local function processPattern(slot)
     local group = tag.pattern[direction]
     if group then
       for _, item in ipairs(group) do
-        if item.label then
-          local newLabel = applyReplacements(item.label)
-          if newLabel ~= item.label then
-            print(string.format("↪ %s → %s", item.label, newLabel))
-            item.label = newLabel
-            changed = true
-          end
+        if applyReplacements(item) then
+          changed = true
         end
       end
     end
@@ -51,7 +66,7 @@ local function processPattern(slot)
   return changed
 end
 
--- MAIN LOOP
+-- Main loop
 local size = ic.getInventorySize(interfaceSide)
 for slot = 1, size do
   processPattern(slot)
