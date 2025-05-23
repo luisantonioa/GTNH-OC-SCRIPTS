@@ -28,14 +28,11 @@ local function findItem(labelSearch)
   return nil
 end
 
-local xenon = findItem("drop of Xenon")
-if not xenon then
-  error("❌ Could not find 'drop of Xenon' in the ME network.")
-end
-print("✅ Found drop of Xenon:")
-print("  id     = " .. xenon.id)
-print("  damage = " .. xenon.damage)
-if xenon.nbt then print("  has NBT") end
+local xenon = {
+  id = "ae2fc:fluid_drop",
+  damage = 0,
+  nbt = '{Fluid: "xenon"}'
+}
 
 -- Replace this table to add more conversions
 local replacements = {
