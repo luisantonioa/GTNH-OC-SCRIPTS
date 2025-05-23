@@ -11,23 +11,6 @@ local MAX_ITEMS = 9
 local dbSlot = 25
 local dbAddress = component.getPrimary("database").address
 
-----------------------------------------
--- Step 1: Look up "drop of Xenon"
-----------------------------------------
-local function findItem(labelSearch)
-  local items = meInterface.getItemsInNetwork() or {}
-  for _, item in ipairs(items) do
-    if item.label and item.label:lower():find(labelSearch:lower()) then
-      return {
-        id = item.name,
-        damage = item.damage,
-        nbt = item.hasTag and item.tag and serialization.serialize(item.tag) or nil
-      }
-    end
-  end
-  return nil
-end
-
 local xenon = {
   id = "ae2fc:fluid_drop",
   damage = 0,
@@ -48,7 +31,12 @@ local replacements = {
 
 -- Check if an item needs replacement
 local function getReplacement(item)
+  if not item or not item.name then
+    return nil
+  end
+  print("Input name: " .. item.name)
   for name, rule in pairs(replacements) do
+    print("Rule name: " .. name)
     if item.name:lower():find(name:lower()) then
       return {
         id = rule.target.id,
