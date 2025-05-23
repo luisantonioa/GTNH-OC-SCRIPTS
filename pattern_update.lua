@@ -70,7 +70,7 @@ for i = 1, MAX_SLOT do
     local newItem = getReplacement(item)
     if newItem then
       writeToDb(dbSlot, newItem)
-      meInterface.setInterfacePatternInput(i, dbAddress, dbSlot, newItem.count, a - 1)
+      meInterface.setInterfacePatternInput(i, dbAddress, dbSlot, newItem.count, a)
       print(string.format("✅ Updated input #%d in pattern %d", a, i))
       changed = true
     end
