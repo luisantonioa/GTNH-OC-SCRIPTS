@@ -230,6 +230,7 @@ local function monitor()
         term.setCursor(1, 1)
         gui.run(thresholds, THRESHOLD_FILE)
       end
+      os.sleep(1)
     until computer.uptime() >= deadline
   end
 end
