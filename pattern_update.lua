@@ -1,29 +1,31 @@
 local component = require("component")
 local meInterface = component.me_interface
 
+-- Replace this table to add more conversions
 local replacements = {
   ["drop of Krypton"] = {
     label = "drop of Xenon",
-    ratio = 250/400,
+    ratio = 250 / 400
   },
   ["drop of Nitrogen"] = {
     label = "drop of Xenon",
-    ratio = 250/1000,
+    ratio = 250 / 1000
   }
 }
 
+-- Apply label replacement and adjust amount
 local function applyReplacements(item)
-  for from, toData in pairs(replacements) do
+  for from, data in pairs(replacements) do
     if item.label and item.label:lower():find(from:lower()) then
-      local newLabel = item.label:gsub(from, toData.label)
+      local newLabel = item.label:gsub(from, data.label)
       if newLabel ~= item.label then
         if item.amount and type(item.amount) == "number" then
           local oldAmount = item.amount
-          local newAmount = math.floor(oldAmount * toData.ratio + 0.5)
+          local newAmount = math.floor(oldAmount * data.ratio + 0.5)
           print(string.format("↪ %s x%d → %s x%d", item.label, oldAmount, newLabel, newAmount))
           item.amount = newAmount
         else
-          print(string.format("↪ %s → %s (no amount to adjust)", item.label, newLabel))
+          print(string.format("↪ %s → %s (no amount)", item.label, newLabel))
         end
         item.label = newLabel
         return true
@@ -33,13 +35,23 @@ local function applyReplacements(item)
   return false
 end
 
-local function processPattern(index)
-  local pattern = meInterface.getPattern(index)
-  if not pattern or not pattern.pattern then return false end
+-- Get number of patterns in this ME Interface
+local function countPatterns()
+  local i = 0
+  while meInterface.getInterfacePattern(i) do
+    i = i + 1
+  end
+  return i
+end
+
+-- Main logic: read patterns, apply replacements, write back
+for i = 0, countPatterns() - 1 do
+  local pattern = meInterface.getInterfacePattern(i)
+  if not pattern or not pattern.pattern then goto continue end
 
   local changed = false
-  for _, dir in ipairs({ "in", "out" }) do
-    local group = pattern.pattern[dir]
+  for _, side in ipairs({ "in", "out" }) do
+    local group = pattern.pattern[side]
     if group then
       for _, item in ipairs(group) do
         if applyReplacements(item) then
@@ -50,21 +62,11 @@ local function processPattern(index)
   end
 
   if changed then
-    meInterface.setPattern(index, pattern)
-    print("✅ Updated pattern at index", index)
+    meInterface.setInterfacePattern(i, pattern)
+    print("✅ Pattern updated at slot", i)
   end
 
-  return changed
+  ::continue::
 end
 
-local patterns = meInterface.getPatterns()
-if not patterns then
-  print("No patterns found in ME Interface.")
-  return
-end
-
-for index = 1, #patterns do
-  processPattern(index)
-end
-
-print("✅ Pattern rewriting complete.")
+print("✅ All patterns checked.")
