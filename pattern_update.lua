@@ -78,18 +78,18 @@ for i = 1, MAX_SLOT do
   local changed = false
 
   -- Inputs
-  for i, item in ipairs(pattern.inputs or {}) do
+  for a, item in ipairs(pattern.inputs or {}) do
     local newItem = getReplacement(item)
     if newItem then
       writeToDb(dbSlot, newItem)
-      meInterface.setInterfacePatternInput(patternIndex, dbAddress, dbSlot, newItem.count, i - 1)
-      print(string.format("✅ Updated input #%d in pattern %d", i, patternIndex))
+      meInterface.setInterfacePatternInput(i, dbAddress, dbSlot, newItem.count, a - 1)
+      print(string.format("✅ Updated input #%d in pattern %d", a, i))
       changed = true
     end
   end
 
   if not changed then
-    print(string.format("🔎 No changes needed for pattern %d", patternIndex))
+    print(string.format("🔎 No changes needed for pattern %d", i))
   end
 
   ::continue::
