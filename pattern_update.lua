@@ -1,6 +1,10 @@
 local component = require("component")
 local meInterface = component.me_interface
 
+-- Interface and pattern parameters
+local MAX_SLOT = 36
+local MAX_ITEMS = 9
+
 -- Replace this table to add more conversions
 local replacements = {
   ["drop of Krypton"] = {
@@ -35,20 +39,8 @@ local function applyReplacements(item)
   return false
 end
 
--- Get number of patterns in this ME Interface
-local function countPatterns()
-  local i = 0
-  while meInterface.getInterfacePattern(i) do
-    i = i + 1
-  end
-  return i
-end
-
-local patterns = countPatterns()
-print("Patterns: ", #patterns)
-
 -- Main logic: read patterns, apply replacements, write back
-for i = 0, patterns - 1 do
+for i = 1, MAX_SLOT do
   local pattern = meInterface.getInterfacePattern(i)
   if not pattern or not pattern.pattern then goto continue end
 
