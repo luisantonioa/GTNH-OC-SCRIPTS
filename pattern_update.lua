@@ -1,35 +1,76 @@
 local component = require("component")
 local meInterface = component.me_interface
+local db = component.database
+local serialization = require("serialization")
 
 -- Interface and pattern parameters
 local MAX_SLOT = 36
 local MAX_ITEMS = 9
 
+-- You must pick a free slot in the database (0-26)
+local dbSlot = 25
+local dbAddress = component.getPrimary("database").address
+
+----------------------------------------
+-- Step 1: Look up "drop of Xenon"
+----------------------------------------
+local function findItem(labelSearch)
+  local items = meInterface.getItemsInNetwork() or {}
+  for _, item in ipairs(items) do
+    if item.label and item.label:lower():find(labelSearch:lower()) then
+      return {
+        id = item.name,
+        damage = item.damage,
+        nbt = item.hasTag and item.tag and serialization.serialize(item.tag) or nil
+      }
+    end
+  end
+  return nil
+end
+
+local xenon = findItem("drop of Xenon")
+if not xenon then
+  error("❌ Could not find 'drop of Xenon' in the ME network.")
+end
+print("✅ Found drop of Xenon:")
+print("  id     = " .. xenon.id)
+print("  damage = " .. xenon.damage)
+if xenon.nbt then print("  has NBT") end
+
 -- Replace this table to add more conversions
 local replacements = {
   ["drop of Krypton"] = {
-    label = "drop of Xenon",
+    target = xenon,
     ratio = 250 / 400
   },
   ["drop of Nitrogen"] = {
-    label = "drop of Xenon",
+    target = xenon,
     ratio = 250 / 1000
   }
 }
 
--- Apply label replacement and adjust amount
-local function applyReplacements(entry)
-  for old, new in pairs(replacements) do
-    if entry.name and entry.name:lower():find(old:lower()) then
-      print("↪ Found", entry.name, "x" .. entry.count)
-      entry.name = new.name
-      local oldCount = entry.count or 0
-      entry.count = math.floor(oldCount * new.ratio + 0.5)
-      print("   → Replaced with", entry.name, "x" .. entry.count)
-      return true
+-- Check if an item needs replacement
+local function getReplacement(item)
+  for name, rule in pairs(replacements) do
+    if item.name:lower():find(name:lower()) then
+      return {
+        id = rule.target.id,
+        damage = rule.target.damage,
+        nbt = rule.target.nbt,
+        count = math.floor(item.count * rule.ratio + 0.5)
+      }
     end
   end
-  return false
+  return nil
+end
+
+-- Writes an item into the DB
+local function writeToDb(slot, item)
+  db.clear(slot)
+  local ok, err = db.set(slot, item.id, item.damage, item.nbt)
+  if not ok then
+    error("Failed to write to DB: " .. tostring(err))
+  end
 end
 
 -- Main logic: read patterns, apply replacements, write back
@@ -38,19 +79,20 @@ for i = 1, MAX_SLOT do
   if not pattern then goto continue end
 
   local changed = false
-  for _, field in ipairs({"inputs", "outputs"}) do
-    if pattern[field] then
-      for _, item in ipairs(pattern[field]) do
-        if applyReplacements(item) then
-          changed = true
-        end
-      end
+
+  -- Inputs
+  for i, item in ipairs(pattern.inputs or {}) do
+    local newItem = getReplacement(item)
+    if newItem then
+      writeToDb(dbSlot, newItem)
+      meInterface.setInterfacePatternInput(patternIndex, dbAddress, dbSlot, newItem.count, i - 1)
+      print(string.format("✅ Updated input #%d in pattern %d", i, patternIndex))
+      changed = true
     end
   end
 
-  if changed then
-    meInterface.setInterfacePattern(i, pattern)
-    print("✅ Pattern updated at slot", i)
+  if not changed then
+    print(string.format("🔎 No changes needed for pattern %d", patternIndex))
   end
 
   ::continue::
