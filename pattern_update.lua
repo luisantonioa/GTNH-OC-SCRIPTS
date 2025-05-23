@@ -18,22 +18,15 @@ local replacements = {
 }
 
 -- Apply label replacement and adjust amount
-local function applyReplacements(item)
-  for from, data in pairs(replacements) do
-    if item.label and item.label:lower():find(from:lower()) then
-      local newLabel = item.label:gsub(from, data.label)
-      if newLabel ~= item.label then
-        if item.amount and type(item.amount) == "number" then
-          local oldAmount = item.amount
-          local newAmount = math.floor(oldAmount * data.ratio + 0.5)
-          print(string.format("↪ %s x%d → %s x%d", item.label, oldAmount, newLabel, newAmount))
-          item.amount = newAmount
-        else
-          print(string.format("↪ %s → %s (no amount)", item.label, newLabel))
-        end
-        item.label = newLabel
-        return true
-      end
+local function applyReplacements(entry)
+  for old, new in pairs(replacements) do
+    if entry.name and entry.name:lower():find(old:lower()) then
+      print("↪ Found", entry.name, "x" .. entry.count)
+      entry.name = new.name
+      local oldCount = entry.count or 0
+      entry.count = math.floor(oldCount * new.ratio + 0.5)
+      print("   → Replaced with", entry.name, "x" .. entry.count)
+      return true
     end
   end
   return false
@@ -42,13 +35,12 @@ end
 -- Main logic: read patterns, apply replacements, write back
 for i = 1, MAX_SLOT do
   local pattern = meInterface.getInterfacePattern(i)
-  if not pattern or not pattern.pattern then goto continue end
+  if not pattern then goto continue end
 
   local changed = false
-  for _, side in ipairs({ "in", "out" }) do
-    local group = pattern.pattern[side]
-    if group then
-      for _, item in ipairs(group) do
+  for _, field in ipairs({"inputs", "outputs"}) do
+    if pattern[field] then
+      for _, item in ipairs(pattern[field]) do
         if applyReplacements(item) then
           changed = true
         end
