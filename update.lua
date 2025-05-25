@@ -1,22 +1,33 @@
-local component = require("component")
 local internet = require("internet")
 local filesystem = require("filesystem")
 
--- Config: edit these
-local repo_owner = "luisantonioa"
-local repo_name = "GTNH-OC-SCRIPTS"
-local branch = "main"
-local manifest_file = "manifest.txt"
+-- Try to load config from update_config.lua, fallback to defaults
+local function load_config()
+  local ok, cfg = pcall(dofile, "update_config.lua")
+  if ok and type(cfg) == "table" then
+    return cfg
+  else
+    print("Warning: Failed to load update_config.lua, using default config.")
+    return {
+      repo_owner = "username",
+      repo_name = "repo",
+      branch = "master",
+      manifest_file = "update_list.txt",
+    }
+  end
+end
 
--- Download URL helper with cache bust (timestamp)
+local config = load_config()
+
+-- Build a raw GitHub URL with cache busting (timestamp)
 local function raw_url(file_path)
   return string.format(
     "https://raw.githubusercontent.com/%s/%s/%s/%s?ts=%d",
-    repo_owner, repo_name, branch, file_path, os.time()
+    config.repo_owner, config.repo_name, config.branch, file_path, os.time()
   )
 end
 
--- Download file content from URL
+-- Download full content from URL or return nil + error
 local function download_url(url)
   local handle, err = internet.request(url)
   if not handle then return nil, err end
@@ -29,48 +40,56 @@ local function download_url(url)
   return data
 end
 
--- Main update function
-local function update_files()
-  print("Downloading manifest: "..manifest_file)
-  local manifest_url = raw_url(manifest_file)
-  local manifest_content, err = download_url(manifest_url)
-  if not manifest_content then
-    print("Error downloading manifest: "..err)
-    return
+-- Download manifest, parse lines (non-empty)
+local function get_files_list()
+  print("Downloading manifest: "..config.manifest_file)
+  local content, err = download_url(raw_url(config.manifest_file))
+  if not content then
+    error("Failed to download manifest: "..tostring(err))
   end
-
-  local files = {}
-  for line in manifest_content:gmatch("[^\r\n]+") do
+  local list = {}
+  for line in content:gmatch("[^\r\n]+") do
     if line:match("%S") then
-      table.insert(files, line)
+      table.insert(list, line)
     end
   end
+  return list
+end
 
+-- Save file content locally, creating directories if needed
+local function save_file(path, content)
+  local dir = filesystem.dirname(path)
+  if dir ~= "" and not filesystem.exists(dir) then
+    filesystem.makeDirectory(dir)
+  end
+  local f, err = io.open(path, "w")
+  if not f then
+    return false, err
+  end
+  f:write(content)
+  f:close()
+  return true
+end
+
+-- Main updater function
+local function update()
+  local files = get_files_list()
   if #files == 0 then
-    print("Manifest empty or no files listed.")
+    print("No files to update.")
     return
   end
 
-  for _, file_path in ipairs(files) do
-    io.write("Downloading "..file_path.."... ")
-    local file_url = raw_url(file_path)
-    local content, err = download_url(file_url)
+  for _, path in ipairs(files) do
+    io.write("Downloading "..path.."... ")
+    local content, err = download_url(raw_url(path))
     if not content then
-      print("Failed: "..err)
+      print("Failed: "..tostring(err))
     else
-      -- Ensure directory exists
-      local dir = filesystem.dirname(file_path)
-      if dir ~= "" and not filesystem.exists(dir) then
-        filesystem.makeDirectory(dir)
-      end
-
-      local file = io.open(file_path, "w")
-      if not file then
-        print("Failed to open file for writing.")
-      else
-        file:write(content)
-        file:close()
+      local ok, save_err = save_file(path, content)
+      if ok then
         print("Done.")
+      else
+        print("Failed to save: "..tostring(save_err))
       end
     end
   end
@@ -78,4 +97,5 @@ local function update_files()
   print("Update complete.")
 end
 
-update_files()
+-- Run the updater
+update()
