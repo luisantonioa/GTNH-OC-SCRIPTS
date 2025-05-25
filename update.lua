@@ -21,9 +21,10 @@ local config = load_config()
 
 -- Build a raw GitHub URL with cache busting (timestamp)
 local function raw_url(file_path)
+  local cacheBuster = math.random(100000, 999999)
   return string.format(
     "https://raw.githubusercontent.com/%s/%s/%s/%s?ts=%d",
-    config.repo_owner, config.repo_name, config.branch, file_path, os.time()
+    config.repo_owner, config.repo_name, config.branch, file_path, cacheBuster
   )
 end
 
